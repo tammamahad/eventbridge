@@ -1,0 +1,6 @@
+target/
+node_modules/
+application.properties
+.DS_Store
+*.pyc
+.venv/
