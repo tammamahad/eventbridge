@@ -2,15 +2,18 @@ package com.tammamahad.eventbridge.controller;
 
 import com.tammamahad.eventbridge.entity.Booking;
 import com.tammamahad.eventbridge.entity.BookingStatus;
+import com.tammamahad.eventbridge.entity.PaymentStatus;
 import com.tammamahad.eventbridge.entity.Party;
 import com.tammamahad.eventbridge.entity.Vendor;
 import com.tammamahad.eventbridge.repo.BookingRepository;
 import com.tammamahad.eventbridge.repo.PartyRepository;
 import com.tammamahad.eventbridge.repo.VendorRepository;
+import com.tammamahad.eventbridge.service.BookingStateService;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @RestController
@@ -20,15 +23,18 @@ public class BookingController {
     private final BookingRepository bookingRepository;
     private final VendorRepository vendorRepository;
     private final PartyRepository partyRepository;
+    private final BookingStateService bookingStateService;
 
     public BookingController(
             BookingRepository bookingRepository,
             VendorRepository vendorRepository,
-            PartyRepository partyRepository
+            PartyRepository partyRepository,
+            BookingStateService bookingStateService
     ) {
         this.bookingRepository = bookingRepository;
         this.vendorRepository = vendorRepository;
         this.partyRepository = partyRepository;
+        this.bookingStateService = bookingStateService;
     }
 
     // GET /bookings
@@ -40,12 +46,12 @@ public class BookingController {
             @RequestParam(required = false) BookingStatus status
     ) {
         if (vendorId != null && status != null) {
-            return bookingRepository.findByVendorIdAndStatus(vendorId, status);
+            return bookingStateService.normalizeAndSaveAll(bookingRepository.findByVendorIdAndStatus(vendorId, status));
         }
         if (vendorId != null) {
-            return bookingRepository.findByVendorId(vendorId);
+            return bookingStateService.normalizeAndSaveAll(bookingRepository.findByVendorId(vendorId));
         }
-        return bookingRepository.findAll();
+        return bookingStateService.normalizeAndSaveAll(bookingRepository.findAll());
     }
 
     // GET /bookings/customer?email=test@example.com
@@ -55,7 +61,9 @@ public class BookingController {
         if (normalized.isEmpty()) {
             throw new RuntimeException("Customer email is required.");
         }
-        return bookingRepository.findByCustomerEmailIgnoreCaseOrderByEventDateDesc(normalized);
+        return bookingStateService.normalizeAndSaveAll(
+                bookingRepository.findByCustomerEmailIgnoreCaseOrderByEventDateDesc(normalized)
+        );
     }
 
     // POST /bookings?vendorId=1
@@ -96,8 +104,10 @@ public class BookingController {
         booking.setCustomerEmail(req.customerEmail);
         booking.setNotes(req.notes);
         booking.setStatus(BookingStatus.REQUESTED);
+        booking.setPaymentStatus(PaymentStatus.NOT_READY);
+        booking.setPaymentAmount(vendor.getStartingPrice());
 
-        return bookingRepository.save(booking);
+        return bookingStateService.normalizeAndPersist(booking);
     }
 
     // PATCH /bookings/1/confirm
@@ -106,8 +116,12 @@ public class BookingController {
         Booking booking = bookingRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Booking not found: " + id));
 
-        booking.setStatus(BookingStatus.CONFIRMED);
-        return bookingRepository.save(booking);
+        booking.setStatus(BookingStatus.APPROVED);
+        booking.setPaymentStatus(PaymentStatus.UNPAID);
+        if (booking.getPaymentAmount() == null && booking.getVendor() != null) {
+            booking.setPaymentAmount(booking.getVendor().getStartingPrice());
+        }
+        return bookingStateService.normalizeAndPersist(booking);
     }
 
     // PATCH /bookings/1/cancel
@@ -117,7 +131,48 @@ public class BookingController {
                 .orElseThrow(() -> new RuntimeException("Booking not found: " + id));
 
         booking.setStatus(BookingStatus.CANCELLED);
-        return bookingRepository.save(booking);
+        if (booking.getPaymentStatus() != PaymentStatus.PAID) {
+            booking.setPaymentStatus(PaymentStatus.NOT_READY);
+        }
+        return bookingStateService.normalizeAndPersist(booking);
+    }
+
+    // PATCH /bookings/1/pay
+    @PatchMapping("/{id}/pay")
+    public Booking pay(@PathVariable Long id, @RequestBody MockPaymentRequest req) {
+        Booking booking = bookingRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Booking not found: " + id));
+
+        if (booking.getStatus() != BookingStatus.APPROVED && booking.getStatus() != BookingStatus.CONFIRMED) {
+            throw new RuntimeException("Only approved bookings can be paid.");
+        }
+        if (booking.getPaymentStatus() == PaymentStatus.PAID) {
+            throw new RuntimeException("Booking is already paid.");
+        }
+
+        String cardholderName = req.cardholderName == null ? "" : req.cardholderName.trim();
+        String cardNumber = req.cardNumber == null ? "" : req.cardNumber.replaceAll("\\s+", "");
+
+        if (cardholderName.isEmpty()) {
+            throw new RuntimeException("Cardholder name is required.");
+        }
+        if (!cardNumber.matches("\\d{16}")) {
+            throw new RuntimeException("Mock card number must be 16 digits.");
+        }
+
+        String last4 = cardNumber.substring(cardNumber.length() - 4);
+        int amount = booking.getPaymentAmount() != null
+                ? booking.getPaymentAmount()
+                : (booking.getVendor() != null && booking.getVendor().getStartingPrice() != null
+                    ? booking.getVendor().getStartingPrice()
+                    : 0);
+
+        booking.setPaymentAmount(amount);
+        booking.setStatus(BookingStatus.CONFIRMED);
+        booking.setPaymentStatus(PaymentStatus.PAID);
+        booking.setPaymentMethodLabel("Mock Visa ending in " + last4);
+        booking.setPaidAt(LocalDateTime.now());
+        return bookingStateService.normalizeAndPersist(booking);
     }
 
     public static class CreateBookingRequest {
@@ -126,5 +181,10 @@ public class BookingController {
         public String customerEmail;
         public String notes;
         public Long partyId;
+    }
+
+    public static class MockPaymentRequest {
+        public String cardholderName;
+        public String cardNumber;
     }
 }

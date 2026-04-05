@@ -5,6 +5,7 @@ import com.tammamahad.eventbridge.entity.BookingStatus;
 import com.tammamahad.eventbridge.entity.Party;
 import com.tammamahad.eventbridge.repo.BookingRepository;
 import com.tammamahad.eventbridge.repo.PartyRepository;
+import com.tammamahad.eventbridge.service.BookingStateService;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,10 +19,16 @@ public class PartyController {
 
     private final PartyRepository partyRepository;
     private final BookingRepository bookingRepository;
+    private final BookingStateService bookingStateService;
 
-    public PartyController(PartyRepository partyRepository, BookingRepository bookingRepository) {
+    public PartyController(
+            PartyRepository partyRepository,
+            BookingRepository bookingRepository,
+            BookingStateService bookingStateService
+    ) {
         this.partyRepository = partyRepository;
         this.bookingRepository = bookingRepository;
+        this.bookingStateService = bookingStateService;
     }
 
     @GetMapping
@@ -67,8 +74,9 @@ public class PartyController {
     }
 
     private PartySummaryResponse toSummary(Party party) {
-        List<Booking> bookings = bookingRepository.findByPartyId(party.getId());
+        List<Booking> bookings = bookingStateService.normalizeAndSaveAll(bookingRepository.findByPartyId(party.getId()));
         int requestedTotal = 0;
+        int approvedTotal = 0;
         int confirmedTotal = 0;
         List<PartyBookingItem> bookingItems = new ArrayList<>();
 
@@ -78,6 +86,7 @@ public class PartyController {
                     : 0;
 
             if (b.getStatus() == BookingStatus.REQUESTED) requestedTotal += estimatedCost;
+            if (b.getStatus() == BookingStatus.APPROVED) approvedTotal += estimatedCost;
             if (b.getStatus() == BookingStatus.CONFIRMED) confirmedTotal += estimatedCost;
 
             bookingItems.add(new PartyBookingItem(
@@ -104,6 +113,7 @@ public class PartyController {
                 party.getNotes(),
                 status,
                 requestedTotal,
+                approvedTotal,
                 confirmedTotal,
                 remaining,
                 bookingItems
@@ -141,6 +151,7 @@ public class PartyController {
             String notes,
             String status,
             Integer requestedTotal,
+            Integer approvedTotal,
             Integer confirmedTotal,
             Integer remainingBudget,
             List<PartyBookingItem> bookings

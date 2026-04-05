@@ -1,17 +1,53 @@
 const API_BASE = process.env.API_BASE || "http://localhost:9090";
 
-const COMMENTS_BY_CATEGORY = {
-  Photography: "Fantastic direction and quick edits. The gallery captured all the key moments beautifully.",
-  Florist: "Arrangements were fresh, on-theme, and looked even better than the mockups.",
-  Catering: "Food quality and service timing were excellent. Guests kept complimenting the menu.",
-  Venue: "Great space and smooth coordination on event day. Setup and teardown were organized.",
-  DJ: "Great playlist balance and crowd reading. Kept the dance floor active all night.",
-  Videography: "Professional filming and a polished highlight video delivered quickly.",
-  Planner: "Very organized timeline and calm communication from start to finish.",
-  default: "Great communication and dependable service. Would book again.",
+const COMMENT_BANK = {
+  Photography: [
+    "We wanted a candid, documentary-style gallery and they delivered exactly that.",
+    "Turnaround was fast and the final album felt polished without looking over-edited.",
+    "They handled family portraits and event coverage smoothly from start to finish.",
+    "Strong eye for lighting and crowd moments. The preview set looked great.",
+  ],
+  Florist: [
+    "The floral design felt elevated and matched the event palette perfectly.",
+    "Centerpieces looked fuller than expected and still held up through the night.",
+    "Easy to collaborate with and quick to adjust the arrangement plan.",
+  ],
+  Catering: [
+    "Guests kept asking who handled the food. Service timing was sharp all evening.",
+    "The menu felt thoughtful and the setup looked clean and professional.",
+    "Staff stayed organized during a busy service window and kept things moving.",
+  ],
+  Venue: [
+    "The room layout worked well for both dinner and dancing. Coordination was smooth.",
+    "A strong space for medium-size events with a clean setup flow.",
+    "The venue team was responsive and flexible during planning.",
+  ],
+  DJ: [
+    "Read the room well and kept the energy balanced without overpowering the event.",
+    "Transitions were clean and the playlist felt tailored to the crowd.",
+    "Handled announcements clearly and kept the pace moving all night.",
+  ],
+  default: [
+    "Easy to work with, responsive, and dependable on event day.",
+    "Good communication throughout planning and a polished final result.",
+    "Professional team and a much smoother experience than expected.",
+  ],
 };
 
-const NAMES = ["Jordan", "Maya", "Alex", "Priya", "Sam", "Taylor", "Chris", "Morgan"];
+const NAME_BANK = [
+  "Jordan",
+  "Maya",
+  "Alex",
+  "Priya",
+  "Chris",
+  "Taylor",
+  "Morgan",
+  "Sam",
+  "Nina",
+  "Elijah",
+  "Camila",
+  "Noah",
+];
 
 async function http(path, options = {}) {
   const res = await fetch(`${API_BASE}${path}`, {
@@ -51,6 +87,18 @@ function hashCode(input) {
   return Math.abs(hash);
 }
 
+function plannedRatings(seed, count) {
+  const patterns = [
+    [5, 5, 4],
+    [5, 4, 4, 5],
+    [4, 4, 5, 4, 5],
+    [5, 5, 5, 4, 5, 4],
+    [4, 5],
+  ];
+  const pattern = patterns[seed % patterns.length];
+  return pattern.slice(0, count);
+}
+
 async function main() {
   const vendors = await http("/vendors");
   if (!Array.isArray(vendors)) throw new Error("Unexpected /vendors payload");
@@ -60,19 +108,22 @@ async function main() {
 
   for (const vendor of vendors) {
     const existing = await http(`/vendors/${vendor.id}/reviews`);
-    if (Array.isArray(existing) && existing.length >= 2) {
+    if (Array.isArray(existing) && existing.length >= 5) {
       skipped += 1;
       continue;
     }
 
-    const baseHash = hashCode(`${vendor.businessName}-${vendor.category}`);
-    const toCreate = Math.max(0, 2 - (existing?.length || 0));
+    const seed = hashCode(`${vendor.businessName}-${vendor.category}-${vendor.city}`);
+    const desiredCount = 1 + (seed % 7);
+    const toCreate = Math.max(0, desiredCount - (existing?.length || 0));
+    const comments = COMMENT_BANK[vendor.category] || COMMENT_BANK.default;
+    const ratings = plannedRatings(seed, desiredCount);
 
     for (let i = 0; i < toCreate; i += 1) {
-      const rating = 4 + ((baseHash + i) % 2); // 4 or 5
-      const name = NAMES[(baseHash + i) % NAMES.length];
-      const comment =
-        COMMENTS_BY_CATEGORY[vendor.category] || COMMENTS_BY_CATEGORY.default;
+      const reviewIndex = (existing?.length || 0) + i;
+      const rating = ratings[reviewIndex] || 4;
+      const name = NAME_BANK[(seed + reviewIndex) % NAME_BANK.length];
+      const comment = comments[(seed + reviewIndex) % comments.length];
 
       await http(`/vendors/${vendor.id}/reviews`, {
         method: "POST",

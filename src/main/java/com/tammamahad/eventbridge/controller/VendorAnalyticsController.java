@@ -3,6 +3,7 @@ package com.tammamahad.eventbridge.controller;
 import com.tammamahad.eventbridge.entity.Booking;
 import com.tammamahad.eventbridge.entity.BookingStatus;
 import com.tammamahad.eventbridge.repo.BookingRepository;
+import com.tammamahad.eventbridge.service.BookingStateService;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -14,18 +15,21 @@ import java.util.*;
 public class VendorAnalyticsController {
 
     private final BookingRepository bookingRepository;
+    private final BookingStateService bookingStateService;
 
-    public VendorAnalyticsController(BookingRepository bookingRepository) {
+    public VendorAnalyticsController(BookingRepository bookingRepository, BookingStateService bookingStateService) {
         this.bookingRepository = bookingRepository;
+        this.bookingStateService = bookingStateService;
     }
 
     @GetMapping("/analytics")
     public VendorAnalyticsResponse analytics(@PathVariable Long vendorId) {
-        List<Booking> bookings = bookingRepository.findByVendorId(vendorId);
+        List<Booking> bookings = bookingStateService.normalizeAndSaveAll(bookingRepository.findByVendorId(vendorId));
         LocalDate today = LocalDate.now();
 
         long total = bookings.size();
         long requested = bookings.stream().filter(b -> b.getStatus() == BookingStatus.REQUESTED).count();
+        long approved = bookings.stream().filter(b -> b.getStatus() == BookingStatus.APPROVED).count();
         long confirmed = bookings.stream().filter(b -> b.getStatus() == BookingStatus.CONFIRMED).count();
         long cancelled = bookings.stream().filter(b -> b.getStatus() == BookingStatus.CANCELLED).count();
         long upcoming = bookings.stream()
@@ -54,6 +58,7 @@ public class VendorAnalyticsController {
         return new VendorAnalyticsResponse(
                 total,
                 requested,
+                approved,
                 confirmed,
                 cancelled,
                 upcoming,
@@ -65,6 +70,7 @@ public class VendorAnalyticsController {
     public record VendorAnalyticsResponse(
             long totalBookings,
             long requestedBookings,
+            long approvedBookings,
             long confirmedBookings,
             long cancelledBookings,
             long upcomingBookings,

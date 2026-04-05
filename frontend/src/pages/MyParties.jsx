@@ -34,7 +34,7 @@ export default function MyParties({ auth }) {
             setRows(Array.isArray(data) ? data : []);
         } catch (e) {
             setRows([]);
-            setMsg(`❌ ${e.message}`);
+            setMsg(e.message);
         } finally {
             setLoading(false);
         }
@@ -48,6 +48,20 @@ export default function MyParties({ auth }) {
     const visible = useMemo(() => {
         return rows.filter((p) => showCompleted || p.status !== "COMPLETED");
     }, [rows, showCompleted]);
+
+    function bookingBadgeClass(status) {
+        if (status === "CONFIRMED") return "confirmed";
+        if (status === "APPROVED") return "approved";
+        if (status === "CANCELLED") return "cancelled";
+        return "requested";
+    }
+
+    function bookingBadgeLabel(status) {
+        if (status === "REQUESTED") return "REQUESTED";
+        if (status === "APPROVED") return "APPROVED";
+        if (status === "CONFIRMED") return "BOOKED";
+        return status || "REQUESTED";
+    }
 
     async function createParty() {
         setMsg("");
@@ -75,12 +89,12 @@ export default function MyParties({ auth }) {
                 budget: budget ? Number(budget) : null,
                 notes: notes.trim(),
             });
-            setMsg("✅ Party created.");
+            setMsg("Party created.");
             setVenue("");
             setNotes("");
             await load();
         } catch (e) {
-            setMsg(`❌ ${e.message}`);
+            setMsg(e.message);
         }
     }
 
@@ -196,23 +210,31 @@ export default function MyParties({ auth }) {
                                     <strong>{money(p.requestedTotal)}</strong>
                                 </div>
                                 <div className="party-metric">
-                                    <span className="muted small">Confirmed</span>
+                                    <span className="muted small">Approved</span>
+                                    <strong>{money(p.approvedTotal)}</strong>
+                                </div>
+                                <div className="party-metric">
+                                    <span className="muted small">Booked</span>
                                     <strong>{money(p.confirmedTotal)}</strong>
                                 </div>
                                 <div className="party-metric">
-                                    <span className="muted small">Remaining</span>
+                                    <span className="muted small">Remaining Budget</span>
                                     <strong>{money(p.remainingBudget)}</strong>
                                 </div>
                             </div>
 
                             <div className="divider" />
+                            <div className="muted small">
+                                Requested vendors are still waiting for a response. Approved vendors are waiting for payment.
+                                Remaining budget excludes requests until they are accepted.
+                            </div>
                             <div className="h3">Vendors in this party</div>
                             <div className="party-bookings">
                                 {(p.bookings || []).map((b) => (
                                     <div key={b.bookingId} className="party-booking-row">
                                         <div>{b.vendorName}</div>
                                         <div className="muted small">{money(b.estimatedCost)}</div>
-                                        <span className={`badge ${String(b.status || "").toLowerCase()}`}>{b.status}</span>
+                                        <span className={`badge ${bookingBadgeClass(b.status)}`}>{bookingBadgeLabel(b.status)}</span>
                                     </div>
                                 ))}
                                 {(p.bookings || []).length === 0 && (

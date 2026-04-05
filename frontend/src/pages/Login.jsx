@@ -9,7 +9,7 @@ function useQuery() {
 export default function Login({ setAuth }) {
     const nav = useNavigate();
     const q = useQuery();
-    const next = q.get("next") || "/";
+    const next = q.get("next") || "/marketplace";
 
     const [vendors, setVendors] = useState([]);
     const [vendorId, setVendorId] = useState("");
@@ -23,9 +23,9 @@ export default function Login({ setAuth }) {
     return (
         <div className="page login-page">
             <div className="login-head">
-                <div className="eyebrow">Demo Access</div>
-                <h1 className="h1">Choose Your EventBridge Workspace</h1>
-                <p className="muted">Browse as a customer or sign in as a vendor to manage bookings and operations.</p>
+                <div className="eyebrow">Access EventBridge</div>
+                <h1 className="h1">Sign in to your EventBridge workspace</h1>
+                <p className="muted">Continue as a customer to browse and book, or enter a vendor workspace to manage requests.</p>
             </div>
 
             <div className="login-shell">

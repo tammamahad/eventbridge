@@ -89,7 +89,7 @@ export default function VendorDetail({ auth, setAuth }) {
 
         // confirmed list for calendar blocking (safe for customers)
         api
-            .getVendorConfirmed(vendorId)
+            .getVendorReserved(vendorId)
             .then((rows) => alive && setConfirmed(Array.isArray(rows) ? rows : []))
             .catch(() => alive && setConfirmed([]));
 
@@ -147,12 +147,12 @@ export default function VendorDetail({ auth, setAuth }) {
 
         try {
             await api.createBooking(vendorId, payload);
-            setStatusMsg("✅ Request submitted! Status: REQUESTED");
+            setStatusMsg("Request submitted. Status: REQUESTED.");
 
             // optional: if vendor is viewing, refresh requests/upcoming via dashboard route
             // For customers: nothing to show (privacy)
         } catch (e) {
-            setStatusMsg(`❌ ${e.message}`);
+            setStatusMsg(e.message);
         }
     }
 
@@ -232,7 +232,6 @@ export default function VendorDetail({ auth, setAuth }) {
                                     <div className="vendor-price-detail">{formatPricing(vendor)}</div>
                                     {vendor.priceNote && <div className="muted small">{vendor.priceNote}</div>}
                                 </div>
-                                <div className="pill subtle">#{vendor.id}</div>
                             </div>
 
                             <div className="kv">
@@ -257,9 +256,9 @@ export default function VendorDetail({ auth, setAuth }) {
 
                         <div className="card">
                             <div className="h3">Portfolio</div>
-                            <div className="muted small">Recent work samples from this vendor category.</div>
+                            <div className="muted small">Recent work samples and style references from this vendor.</div>
                             <div className="portfolio-grid">
-                                {getVendorGalleryUrls(vendor, 4).map((url, idx) => (
+                                {getVendorGalleryUrls(vendor, 6).map((url, idx) => (
                                     <div key={`${vendor.id}-portfolio-${idx}`} className="portfolio-item">
                                         <img
                                             src={url}

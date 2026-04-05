@@ -2,6 +2,7 @@ package com.tammamahad.eventbridge.entity;
 
 import jakarta.persistence.*;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(
@@ -38,6 +39,14 @@ public class Booking {
     @Column(nullable = false)
     private BookingStatus status = BookingStatus.REQUESTED;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private PaymentStatus paymentStatus = PaymentStatus.NOT_READY;
+
+    private Integer paymentAmount;
+    private String paymentMethodLabel;
+    private LocalDateTime paidAt;
+
     public Booking() {}
 
     public Booking(Vendor vendor, LocalDate eventDate, String customerName, String customerEmail, String notes) {
@@ -57,6 +66,10 @@ public class Booking {
     public String getCustomerEmail() { return customerEmail; }
     public String getNotes() { return notes; }
     public BookingStatus getStatus() { return status; }
+    public PaymentStatus getPaymentStatus() { return paymentStatus; }
+    public Integer getPaymentAmount() { return paymentAmount; }
+    public String getPaymentMethodLabel() { return paymentMethodLabel; }
+    public LocalDateTime getPaidAt() { return paidAt; }
 
     public void setId(Long id) { this.id = id; }
     public void setVendor(Vendor vendor) { this.vendor = vendor; }
@@ -66,4 +79,8 @@ public class Booking {
     public void setCustomerEmail(String customerEmail) { this.customerEmail = customerEmail; }
     public void setNotes(String notes) { this.notes = notes; }
     public void setStatus(BookingStatus status) { this.status = status; }
+    public void setPaymentStatus(PaymentStatus paymentStatus) { this.paymentStatus = paymentStatus; }
+    public void setPaymentAmount(Integer paymentAmount) { this.paymentAmount = paymentAmount; }
+    public void setPaymentMethodLabel(String paymentMethodLabel) { this.paymentMethodLabel = paymentMethodLabel; }
+    public void setPaidAt(LocalDateTime paidAt) { this.paidAt = paidAt; }
 }

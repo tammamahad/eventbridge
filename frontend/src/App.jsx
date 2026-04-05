@@ -1,14 +1,15 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { BrowserRouter, Link, Navigate, NavLink, Route, Routes, useNavigate, useParams } from "react-router-dom";
-import { api } from "./api";
+import React, { useEffect, useState } from "react";
+import { BrowserRouter, Link, Navigate, NavLink, Route, Routes } from "react-router-dom";
 import "./styles.css";
 
 import Marketplace from "./pages/Marketplace";
+import Home from "./pages/Home";
 import VendorDetail from "./pages/VendorDetail";
 import VendorDashboard from "./pages/VendorDashboard";
 import Login from "./pages/Login";
 import CustomerDashboard from "./pages/CustomerDashboard";
 import MyParties from "./pages/MyParties";
+import Messages from "./pages/Messages";
 
 function TopNav({ auth, setAuth }) {
     const customerName = (auth.customerName || "").trim();
@@ -31,7 +32,13 @@ function TopNav({ auth, setAuth }) {
 
                 <div className="nav-links">
                     {auth.role !== "VENDOR" && (
-                        <NavLink to="/" className={({ isActive }) => (isActive ? "navlink active" : "navlink")}>
+                        <NavLink to="/" end className={({ isActive }) => (isActive ? "navlink active" : "navlink")}>
+                            Home
+                        </NavLink>
+                    )}
+
+                    {auth.role !== "VENDOR" && (
+                        <NavLink to="/marketplace" className={({ isActive }) => (isActive ? "navlink active" : "navlink")}>
                             Marketplace
                         </NavLink>
                     )}
@@ -60,6 +67,15 @@ function TopNav({ auth, setAuth }) {
                             className={({ isActive }) => (isActive ? "navlink active" : "navlink")}
                         >
                             My Bookings
+                        </NavLink>
+                    )}
+
+                    {auth.role !== "NONE" && (
+                        <NavLink
+                            to="/messages"
+                            className={({ isActive }) => (isActive ? "navlink active" : "navlink")}
+                        >
+                            Messages
                         </NavLink>
                     )}
                 </div>
@@ -109,12 +125,14 @@ export default function App() {
                 <Routes>
                     <Route
                         path="/"
-                        element={auth.role === "VENDOR" ? <Navigate to="/vendor/dashboard" replace /> : <Marketplace auth={auth} />}
+                        element={auth.role === "VENDOR" ? <Navigate to="/vendor/dashboard" replace /> : <Home />}
                     />
+                    <Route path="/marketplace" element={auth.role === "VENDOR" ? <Navigate to="/vendor/dashboard" replace /> : <Marketplace auth={auth} />} />
                     <Route path="/vendors/:id" element={<VendorDetail auth={auth} setAuth={setAuth} />} />
                     <Route path="/vendor/dashboard" element={<VendorDashboard auth={auth} />} />
                     <Route path="/customer/parties" element={<MyParties auth={auth} />} />
                     <Route path="/customer/dashboard" element={<CustomerDashboard auth={auth} />} />
+                    <Route path="/messages" element={<Messages auth={auth} />} />
                     <Route path="/login" element={<Login setAuth={setAuth} />} />
                 </Routes>
             </div>

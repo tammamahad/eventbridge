@@ -4,3 +4,4 @@ application.properties
 .DS_Store
 *.pyc
 .venv/
+.idea/

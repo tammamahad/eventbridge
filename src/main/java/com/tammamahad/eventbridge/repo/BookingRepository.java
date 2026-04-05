@@ -17,6 +17,8 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     List<Booking> findByVendorIdAndStatus(Long vendorId, BookingStatus status);
 
+    List<Booking> findByVendorIdAndStatusIn(Long vendorId, List<BookingStatus> statuses);
+
     List<Booking> findByVendorIdAndStatusAndEventDateGreaterThanEqual(Long vendorId, BookingStatus status, LocalDate eventDate);
 
     List<Booking> findByCustomerEmailIgnoreCaseOrderByEventDateDesc(String customerEmail);

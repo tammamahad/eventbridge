@@ -36,12 +36,13 @@ export default function Marketplace() {
     const [q, setQ] = useState("");
     const [category, setCategory] = useState("ALL");
     const [distanceRadius, setDistanceRadius] = useState("ANY");
+    const [sortBy, setSortBy] = useState("CURATED");
 
     useEffect(() => {
         let alive = true;
         setLoading(true);
-        api
-            .listVendors()
+
+        api.listVendors()
             .then((data) => {
                 if (!alive) return;
                 setVendors(Array.isArray(data) ? data : []);
@@ -49,8 +50,7 @@ export default function Marketplace() {
             .catch(console.error)
             .finally(() => alive && setLoading(false));
 
-        api
-            .getRatingsSummary()
+        api.getRatingsSummary()
             .then((rows) => {
                 if (!alive) return;
                 const map = {};
@@ -64,16 +64,13 @@ export default function Marketplace() {
             })
             .catch(() => alive && setRatingsByVendor({}));
 
-        return () => (alive = false);
+        return () => {
+            alive = false;
+        };
     }, []);
 
     const categories = useMemo(() => {
         const set = new Set(vendors.map((v) => v.category).filter(Boolean));
-        return ["ALL", ...Array.from(set).sort()];
-    }, [vendors]);
-
-    const cities = useMemo(() => {
-        const set = new Set(vendors.map((v) => v.city).filter(Boolean));
         return ["ALL", ...Array.from(set).sort()];
     }, [vendors]);
 
@@ -82,10 +79,7 @@ export default function Marketplace() {
         const inferredCity = inferCityFromQuery(rawNeedle);
         const center = inferredCity ? CITY_CENTERS[inferredCity] : null;
         const radius = Number(distanceRadius);
-        const effectiveNeedle =
-            inferredCity
-                ? rawNeedle.replace(inferredCity.toLowerCase(), "").trim()
-                : rawNeedle;
+        const effectiveNeedle = inferredCity ? rawNeedle.replace(inferredCity.toLowerCase(), "").trim() : rawNeedle;
 
         const results = vendors
             .map((v) => {
@@ -98,37 +92,57 @@ export default function Marketplace() {
                 return { ...v, _distanceMiles: distanceMiles };
             })
             .filter((v) => {
-            const matchQ =
-                !effectiveNeedle ||
-                `${v.businessName || ""} ${v.category || ""}`
-                    .toLowerCase()
-                    .includes(effectiveNeedle);
+                const matchQ =
+                    !effectiveNeedle ||
+                    `${v.businessName || ""} ${v.category || ""}`.toLowerCase().includes(effectiveNeedle);
 
-            const matchCat = category === "ALL" || v.category === category;
-            const matchDistance =
-                !center ||
-                distanceRadius === "ANY" ||
-                (Number.isFinite(v._distanceMiles) && v._distanceMiles <= radius);
+                const matchCat = category === "ALL" || v.category === category;
+                const matchDistance =
+                    !center ||
+                    distanceRadius === "ANY" ||
+                    (Number.isFinite(v._distanceMiles) && v._distanceMiles <= radius);
 
-            return matchQ && matchCat && matchDistance;
-        });
+                return matchQ && matchCat && matchDistance;
+            });
 
         return results.sort((a, b) => {
-            const da = Number.isFinite(a._distanceMiles) ? a._distanceMiles : Number.POSITIVE_INFINITY;
-            const db = Number.isFinite(b._distanceMiles) ? b._distanceMiles : Number.POSITIVE_INFINITY;
-            return da - db;
-        });
-    }, [vendors, q, category, distanceRadius]);
+            const ratingA = Number(ratingsByVendor[a.id]?.averageRating || 0);
+            const ratingB = Number(ratingsByVendor[b.id]?.averageRating || 0);
+            const countA = Number(ratingsByVendor[a.id]?.reviewCount || 0);
+            const countB = Number(ratingsByVendor[b.id]?.reviewCount || 0);
+            const priceA = Number(a.startingPrice || Number.POSITIVE_INFINITY);
+            const priceB = Number(b.startingPrice || Number.POSITIVE_INFINITY);
+            const distA = Number.isFinite(a._distanceMiles) ? a._distanceMiles : Number.POSITIVE_INFINITY;
+            const distB = Number.isFinite(b._distanceMiles) ? b._distanceMiles : Number.POSITIVE_INFINITY;
 
-    const totalCategories = categories.filter((c) => c !== "ALL").length;
-    const totalCities = cities.filter((c) => c !== "ALL").length;
+            if (sortBy === "PRICE_LOW") return priceA - priceB;
+            if (sortBy === "PRICE_HIGH") return priceB - priceA;
+            if (sortBy === "TOP_RATED") {
+                if (ratingB !== ratingA) return ratingB - ratingA;
+                return countB - countA;
+            }
+            if (sortBy === "NEAREST") return distA - distB;
+
+            const scoreA =
+                ratingA * 12 +
+                Math.min(countA, 5) * 1.8 +
+                (Number.isFinite(a._distanceMiles) ? Math.max(0, 18 - distA) : 0) +
+                (priceA <= 400 ? 1.25 : 0);
+            const scoreB =
+                ratingB * 12 +
+                Math.min(countB, 5) * 1.8 +
+                (Number.isFinite(b._distanceMiles) ? Math.max(0, 18 - distB) : 0) +
+                (priceB <= 400 ? 1.25 : 0);
+            return scoreB - scoreA;
+        });
+    }, [vendors, q, category, distanceRadius, sortBy, ratingsByVendor]);
 
     function formatPricing(vendor) {
         const amount = Number(vendor?.startingPrice);
         const type = String(vendor?.pricingType || "PER_EVENT");
         if (!Number.isFinite(amount) || amount <= 0) return "Contact for pricing";
         const suffix = type === "PER_HOUR" ? "/hour" : type === "PACKAGE" ? " package" : " per event";
-        return `Starting at $${amount.toLocaleString()}${suffix}`;
+        return `From $${amount.toLocaleString()}${suffix}`;
     }
 
     function formatRating(vendorId) {
@@ -136,7 +150,7 @@ export default function Marketplace() {
         const avg = Number(data?.averageRating);
         const count = Number(data?.reviewCount || 0);
         if (!Number.isFinite(avg) || count <= 0) return "New";
-        return `${avg.toFixed(1)} (${count})`;
+        return `${avg.toFixed(1)} · ${count} review${count === 1 ? "" : "s"}`;
     }
 
     function formatDistance(vendor) {
@@ -144,6 +158,25 @@ export default function Marketplace() {
         const inferredCity = inferCityFromQuery(q);
         if (!inferredCity) return null;
         return `${vendor._distanceMiles.toFixed(1)} mi from ${inferredCity}`;
+    }
+
+    function vendorMeta(vendor) {
+        const rating = Number(ratingsByVendor[vendor.id]?.averageRating || 0);
+        const count = Number(ratingsByVendor[vendor.id]?.reviewCount || 0);
+        const price = Number(vendor.startingPrice || 0);
+
+        if (count >= 6 && rating >= 4.7) return "Most loved";
+        if (count >= 4 && rating >= 4.4) return "Books often";
+        if (price > 0 && price <= 300) return "Budget-friendly";
+        if (vendor.category === "Venue" || vendor.category === "Catering") return "Group favorite";
+        return "Popular pick";
+    }
+
+    function vendorSupportLine(vendor) {
+        const count = Number(ratingsByVendor[vendor.id]?.reviewCount || 0);
+        if (count > 0) return `${count} recent review${count === 1 ? "" : "s"}`;
+        if (vendor.priceNote) return vendor.priceNote;
+        return `Serving ${vendor.city} events`;
     }
 
     function onVendorImageError(event, vendor) {
@@ -164,37 +197,22 @@ export default function Marketplace() {
 
     return (
         <div className="page">
-            <div className="hero hero-shell">
+            <div className="hero marketplace-hero">
                 <div className="hero-copy">
-                    <div className="eyebrow">Global Event Marketplace</div>
-                    <h1 className="h1">Plan Better Events With Trusted Local Vendors</h1>
+                    <div className="editorial-kicker">Marketplace</div>
+                    <h1 className="h1">Find vendors that match the style and scale of the event you are planning.</h1>
                     <p className="muted">
-                        Search businesses by name, category, or city. Compare pricing, availability, and book confidently.
+                        Search by service, city, and distance. Sort by price, rating, or proximity before you send a request.
                     </p>
-                </div>
-
-                <div className="hero-stats">
-                    <div className="stat-card">
-                        <div className="stat-value">{vendors.length}</div>
-                        <div className="stat-label">Active Vendors</div>
-                    </div>
-                    <div className="stat-card">
-                        <div className="stat-value">{totalCategories}</div>
-                        <div className="stat-label">Service Types</div>
-                    </div>
-                    <div className="stat-card">
-                        <div className="stat-value">{totalCities}</div>
-                        <div className="stat-label">Active Cities</div>
-                    </div>
                 </div>
             </div>
 
-            <div className="card filter-shell">
-                <div className="filters">
+            <div className="card marketplace-filter-shell">
+                <div className="marketplace-topbar">
                     <div className="filter-control">
-                        <label className="filter-label">What are you looking for?</label>
+                        <label className="filter-label">Search</label>
                         <input
-                            className="input"
+                            className="input marketplace-search-input"
                             placeholder="Try: photographer in Detroit"
                             value={q}
                             onChange={(e) => setQ(e.target.value)}
@@ -202,23 +220,8 @@ export default function Marketplace() {
                     </div>
 
                     <div className="filter-control">
-                        <label className="filter-label">Category</label>
-                        <select className="select" value={category} onChange={(e) => setCategory(e.target.value)}>
-                            {categories.map((c) => (
-                                <option key={c} value={c}>
-                                    {c === "ALL" ? "All categories" : c}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-
-                    <div className="filter-control">
                         <label className="filter-label">Distance</label>
-                        <select
-                            className="select"
-                            value={distanceRadius}
-                            onChange={(e) => setDistanceRadius(e.target.value)}
-                        >
+                        <select className="select" value={distanceRadius} onChange={(e) => setDistanceRadius(e.target.value)}>
                             <option value="ANY">Any distance</option>
                             <option value="10">Within 10 mi</option>
                             <option value="25">Within 25 mi</option>
@@ -226,19 +229,38 @@ export default function Marketplace() {
                             <option value="60">Within 60 mi</option>
                         </select>
                     </div>
+
+                    <div className="filter-control">
+                        <label className="filter-label">Sort</label>
+                        <select className="select" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+                            <option value="CURATED">Curated</option>
+                            <option value="TOP_RATED">Top rated</option>
+                            <option value="PRICE_LOW">Price: low to high</option>
+                            <option value="PRICE_HIGH">Price: high to low</option>
+                            <option value="NEAREST">Nearest first</option>
+                        </select>
+                    </div>
                 </div>
 
-                <div className="filter-meta">
+                <div className="marketplace-chipbar">
+                    {categories.slice(0, 8).map((c) => (
+                        <button
+                            key={c}
+                            type="button"
+                            className={c === category ? "market-chip active" : "market-chip"}
+                            onClick={() => setCategory(c)}
+                        >
+                            {c === "ALL" ? "All" : c}
+                        </button>
+                    ))}
+                </div>
+
+                <div className="marketplace-meta">
                     <div className="muted small">Showing {filtered.length} of {vendors.length} vendors</div>
-                    <div className="chip-row">
-                        {inferCityFromQuery(q) ? (
-                            <span className="chip">Distance anchor: {inferCityFromQuery(q)}</span>
-                        ) : (
-                            <span className="chip">Type a city to activate distance filtering</span>
-                        )}
-                        <span className="chip">Verified local businesses</span>
-                        <span className="chip">Transparent starting prices</span>
-                        <span className="chip">Direct request workflow</span>
+                    <div className="muted small">
+                        {inferCityFromQuery(q)
+                            ? `Browsing around ${inferCityFromQuery(q)}`
+                            : "Add a city to compare vendors by distance"}
                     </div>
                 </div>
             </div>
@@ -246,39 +268,39 @@ export default function Marketplace() {
             {loading ? (
                 <div className="muted">Loading vendors…</div>
             ) : (
-                <>
-                    <div className="grid">
-                        {filtered.map((v, idx) => (
-                            <button
-                                key={v.id}
-                                className="card vendor-card"
-                                style={{ "--card-index": idx }}
-                                onClick={() => nav(`/vendors/${v.id}`)}
-                                aria-label={`Open ${v.businessName} profile`}
-                            >
-                                <div className="thumb">
-                                    <img
-                                        className="thumb-img"
-                                        src={getVendorImageUrl(v)}
-                                        alt={`${v.businessName} preview`}
-                                        loading="lazy"
-                                        data-attempt="0"
-                                        onError={(e) => onVendorImageError(e, v)}
-                                    />
-                                </div>
-                                <div className="vendor-meta">
+                <div className="grid marketplace-grid">
+                    {filtered.map((v, idx) => (
+                        <button
+                            key={v.id}
+                            className="card vendor-card marketplace-card"
+                            style={{ "--card-index": idx }}
+                            onClick={() => nav(`/vendors/${v.id}`)}
+                            aria-label={`Open ${v.businessName} profile`}
+                        >
+                            <div className="thumb">
+                                <img
+                                    className="thumb-img"
+                                    src={getVendorImageUrl(v)}
+                                    alt={`${v.businessName} preview`}
+                                    loading="lazy"
+                                    data-attempt="0"
+                                    onError={(e) => onVendorImageError(e, v)}
+                                />
+                            </div>
+                            <div className="vendor-meta">
+                                <div className="marketplace-card-head">
                                     <div className="vendor-name">{v.businessName}</div>
-                                    <div className="vendor-sub">
-                                        {v.category} • {v.city}
-                                    </div>
-                                    {formatDistance(v) && <div className="vendor-distance">{formatDistance(v)}</div>}
-                                    <div className="vendor-rating">Rating: {formatRating(v.id)}</div>
-                                    <div className="vendor-price">{formatPricing(v)}</div>
+                                    <div className="marketplace-card-tag">{vendorMeta(v)}</div>
                                 </div>
-                            </button>
-                        ))}
-                    </div>
-                </>
+                                <div className="vendor-sub">{v.category} in {v.city}</div>
+                                {formatDistance(v) && <div className="vendor-distance">{formatDistance(v)}</div>}
+                                <div className="vendor-rating">{formatRating(v.id)}</div>
+                                <div className="marketplace-card-support muted small">{vendorSupportLine(v)}</div>
+                                <div className="vendor-price">{formatPricing(v)}</div>
+                            </div>
+                        </button>
+                    ))}
+                </div>
             )}
         </div>
     );

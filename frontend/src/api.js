@@ -1,4 +1,4 @@
-const API_BASE = "http://localhost:9090";
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || "http://localhost:9090").replace(/\/$/, "");
 
 async function http(path, options = {}) {
     const res = await fetch(`${API_BASE}${path}`, {
@@ -57,11 +57,20 @@ export const api = {
     listAllBookings: () => http(`/bookings`),
     getCustomerBookings: (email) =>
         http(`/bookings/customer?email=${encodeURIComponent(email)}`),
+    getBookingMessages: (bookingId) =>
+        http(`/bookings/${bookingId}/messages`),
+    sendBookingMessage: (bookingId, payload) =>
+        http(`/bookings/${bookingId}/messages`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        }),
 
     // vendor-only booking views
     getVendorBookings: (vendorId) => http(`/vendors/${vendorId}/bookings`),
     getVendorRequests: (vendorId) => http(`/vendors/${vendorId}/bookings/requests`),
-    getVendorConfirmed: (vendorId) => http(`/vendors/${vendorId}/bookings/confirmed`),
+    getVendorApproved: (vendorId) => http(`/vendors/${vendorId}/bookings/approved`),
+    getVendorReserved: (vendorId) => http(`/vendors/${vendorId}/bookings/reserved`),
     getVendorUpcoming: (vendorId) => http(`/vendors/${vendorId}/bookings/upcoming`),
     getVendorAnalytics: (vendorId) => http(`/vendors/${vendorId}/analytics`),
     getVendorReviews: (vendorId) => http(`/vendors/${vendorId}/reviews`),
@@ -78,4 +87,10 @@ export const api = {
         http(`/bookings/${bookingId}/confirm`, { method: "PATCH" }),
     cancelBooking: (bookingId) =>
         http(`/bookings/${bookingId}/cancel`, { method: "PATCH" }),
+    payBooking: (bookingId, payload) =>
+        http(`/bookings/${bookingId}/pay`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        }),
 };
